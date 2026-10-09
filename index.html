@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Cairo:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
 <div class="app">
@@ -37,8 +37,10 @@
 
 <canvas id="confetti"></canvas>
 
-<script src="app.js"></script>
-<!-- ===== content packs: add one <script> line per booklet ===== -->
-<script src="content/topic4.js"></script>
+<script src="app.js?v=2"></script>
+<!-- ===== content packs: add one <script> line per booklet =====
+     Bump ?v=N on every tag above when publishing, so browsers pick up
+     the new version immediately instead of waiting out their cache. -->
+<script src="content/topic4.js?v=2"></script>
 </body>
 </html>

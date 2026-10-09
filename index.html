@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Cairo:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 <div class="app">
@@ -21,7 +21,20 @@
         <span>Leen Science<small>Grade 4 · practice &amp; quizzes</small></span>
       </button>
       <div class="spacer"></div>
-      <div class="starpill">⭐ <span id="starCount">0</span></div>
+      <span id="signedBits" hidden>
+        <span class="starpill">⭐ <span id="starCount">0</span></span>
+      </span>
+      <div class="who" id="whoWrap" hidden>
+        <button class="whobtn" id="whoBtn">
+          <span class="av" id="whoAv">L</span><span id="whoName">Student</span><span class="car">▾</span>
+        </button>
+        <div class="whomenu" id="whoMenu" hidden>
+          <button data-act="switch">👥 Switch student</button>
+          <button data-act="reset">♻️ Reset my score</button>
+          <button data-act="teacher" data-go="#/teacher">👩‍🏫 Teacher view</button>
+          <button data-act="delete" class="bad">🗑️ Delete this student</button>
+        </div>
+      </div>
       <button class="iconbtn" id="langBtn" title="Show every Arabic translation · إظهار كل الترجمات">ع</button>
       <button class="iconbtn" id="soundBtn" title="Sound">🔊</button>
       <button class="iconbtn" id="themeBtn" title="Dark mode">🌙</button>
@@ -37,10 +50,10 @@
 
 <canvas id="confetti"></canvas>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 <!-- ===== content packs: add one <script> line per booklet =====
      Bump ?v=N on every tag above when publishing, so browsers pick up
      the new version immediately instead of waiting out their cache. -->
-<script src="content/topic4.js?v=2"></script>
+<script src="content/topic4.js?v=3"></script>
 </body>
 </html>

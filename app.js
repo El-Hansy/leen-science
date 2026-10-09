@@ -9,15 +9,75 @@ const SC = {
 };
 
 /* ---------------------------------------------------------
-   1. Storage
+   1. Storage — one saved account per username
+   Several students can share the same browser. Each username keeps its
+   own stars, SmartScores and mistakes; signing in again by that same
+   username brings the progress back. No password: this is a practice
+   app on a family device, not an account system holding anything
+   sensitive, so a name is the whole key.
    --------------------------------------------------------- */
-const KEY = 'leen-science-v1';
-const DEFAULTS = { name:'Leen', lang:'en', theme:'light', sound:true, stars:0, skills:{}, mistakes:[], days:[] };
-let DB = (() => {
-  try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); }
-  catch(e){ return Object.assign({}, DEFAULTS); }
+const KEY = 'leen-science-v2';
+const OLD_KEY = 'leen-science-v1';
+
+const today = () => new Date().toISOString().slice(0,10);
+/* The key is case- and space-insensitive, so "LeenAhmed", "leenahmed"
+   and "Leen Ahmed " all return to the same saved progress. */
+const userKey = n => String(n||'').trim().toLowerCase().replace(/\s+/g,'');
+const blankUser = name => ({ name, created:today(), last:today(), stars:0, skills:{}, mistakes:[], days:[] });
+
+let STORE = (function(){
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){}
+  if(s && s.users) return s;
+  s = { v:2, current:null, prefs:{ lang:'en', theme:'light', sound:true }, users:{} };
+  try { // carry over progress saved before usernames existed
+    const old = JSON.parse(localStorage.getItem(OLD_KEY) || 'null');
+    if(old && old.skills && Object.keys(old.skills).length){
+      const k = userKey(old.name || 'Leen');
+      s.users[k] = Object.assign(blankUser(old.name || 'Leen'), {
+        stars: old.stars || 0, skills: old.skills || {},
+        mistakes: old.mistakes || [], days: old.days || [] });
+      s.current = k;
+    }
+    if(old){
+      if(old.theme) s.prefs.theme = old.theme;
+      if(old.lang)  s.prefs.lang  = old.lang;
+      if(typeof old.sound === 'boolean') s.prefs.sound = old.sound;
+    }
+  } catch(e){}
+  return s;
 })();
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch(e){} };
+
+const PREFS = STORE.prefs;
+let DB = STORE.current ? STORE.users[STORE.current] : null;   // the signed-in student
+if(STORE.current && !DB) STORE.current = null;
+
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(STORE)); } catch(e){} };
+
+function signIn(rawName){
+  const k = userKey(rawName);
+  if(!k) return null;
+  if(!STORE.users[k]) STORE.users[k] = blankUser(String(rawName).trim());
+  STORE.current = k;
+  DB = STORE.users[k];
+  DB.last = today();
+  save();
+  return DB;
+}
+function signOut(){ STORE.current = null; DB = null; save(); }
+function resetProgress(){
+  if(!DB) return;
+  Object.assign(DB, { stars:0, skills:{}, mistakes:[], days:[] });
+  save();
+}
+function deleteUser(key){
+  delete STORE.users[key];
+  if(STORE.current === key){ STORE.current = null; DB = null; }
+  save();
+}
+const userList = () => Object.entries(STORE.users)
+  .map(([k,u]) => Object.assign({ key:k }, u))
+  .sort((a,b) => String(b.last).localeCompare(String(a.last)));
 
 function skillState(id){
   if(!DB.skills[id]) DB.skills[id] = { score:0, best:0, seen:0, right:0, wrong:0, mastered:false };
@@ -80,7 +140,7 @@ function sameWord(input, list){
 const ar = (txt, cls='') => txt ? `<div class="artrans ar ${cls}">${txt}</div>` : '';
 const arSpan = (txt, style='') => txt ? `<span class="artrans ar" style="${style}">${txt}</span>` : '';
 const INFO = '<button class="infoi" title="Translate this · ترجمة" aria-label="Translate">i</button>';
-const showAr = () => DB.lang !== 'en';
+const showAr = () => PREFS.lang !== 'en';
 
 function allSkills(){
   const out = [];
@@ -92,7 +152,7 @@ function findSkill(id){ return allSkills().find(x => x.skill.id === id); }
 /* sound + confetti ---------------------------------------- */
 let AC = null;
 function beep(kind){
-  if(!DB.sound) return;
+  if(!PREFS.sound) return;
   try{
     AC = AC || new (window.AudioContext || window.webkitAudioContext)();
     const seq = kind === 'ok' ? [[660,0,.09],[880,.09,.14]] : kind === 'win' ? [[523,0,.1],[659,.1,.1],[784,.2,.1],[1047,.3,.22]] : [[200,0,.18]];
@@ -131,18 +191,48 @@ function confetti(){
    3. Shell / chrome
    --------------------------------------------------------- */
 function applyPrefs(){
-  document.documentElement.dataset.theme = DB.theme;
-  document.body.classList.toggle('show-ar', DB.lang !== 'en');
-  const lb = $('#langBtn'); if(lb) lb.classList.toggle('on', DB.lang !== 'en');
-  const sb = $('#soundBtn'); if(sb){ sb.textContent = DB.sound ? '🔊' : '🔇'; }
-  const tb = $('#themeBtn'); if(tb){ tb.textContent = DB.theme === 'dark' ? '☀️' : '🌙'; }
-  const st = $('#starCount'); if(st) st.textContent = DB.stars;
+  document.documentElement.dataset.theme = PREFS.theme;
+  document.body.classList.toggle('show-ar', PREFS.lang !== 'en');
+  const lb = $('#langBtn'); if(lb) lb.classList.toggle('on', PREFS.lang !== 'en');
+  const sb = $('#soundBtn'); if(sb){ sb.textContent = PREFS.sound ? '🔊' : '🔇'; }
+  const tb = $('#themeBtn'); if(tb){ tb.textContent = PREFS.theme === 'dark' ? '☀️' : '🌙'; }
+  const st = $('#starCount'); if(st) st.textContent = DB ? DB.stars : 0;
+  const who = $('#whoWrap');
+  if(who){
+    who.hidden = !DB;
+    if(DB){ $('#whoName').textContent = DB.name; $('#whoAv').textContent = DB.name.slice(0,1).toUpperCase(); }
+  }
+  const bar = $('#signedBits'); if(bar) bar.hidden = !DB;
 }
 function chrome(){
-  $('#langBtn').onclick  = () => { DB.lang  = DB.lang === 'en' ? 'both' : 'en'; save(); applyPrefs(); };
-  $('#soundBtn').onclick = () => { DB.sound = !DB.sound; save(); applyPrefs(); beep('ok'); };
-  $('#themeBtn').onclick = () => { DB.theme = DB.theme === 'dark' ? 'light' : 'dark'; save(); applyPrefs(); };
+  $('#langBtn').onclick  = () => { PREFS.lang  = PREFS.lang === 'en' ? 'both' : 'en'; save(); applyPrefs(); route(); };
+  $('#soundBtn').onclick = () => { PREFS.sound = !PREFS.sound; save(); applyPrefs(); beep('ok'); };
+  $('#themeBtn').onclick = () => { PREFS.theme = PREFS.theme === 'dark' ? 'light' : 'dark'; save(); applyPrefs(); };
   $('#homeBtn').onclick  = () => { location.hash = '#/'; };
+
+  const menu = $('#whoMenu');
+  $('#whoBtn').onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; };
+  document.addEventListener('click', () => { if(menu) menu.hidden = true; });
+  menu.onclick = e => e.stopPropagation();
+
+  menu.querySelector('[data-act="switch"]').onclick = () => {
+    menu.hidden = true; signOut(); applyPrefs(); location.hash = '#/'; route();
+  };
+  menu.querySelector('[data-act="reset"]').onclick = async () => {
+    menu.hidden = true;
+    if(await askConfirm({ title:'Reset your score?',
+      body:`This sets <b>${esc(DB.name)}</b>'s stars, SmartScores and mistakes back to zero so you can start fresh. The lessons stay exactly as they are.`,
+      ok:'Reset my score' })){
+      resetProgress(); applyPrefs(); toast('Score reset — good luck!'); location.hash = '#/'; route();
+    }
+  };
+  menu.querySelector('[data-act="delete"]').onclick = async () => {
+    menu.hidden = true;
+    const name = DB.name, key = STORE.current;
+    if(await askConfirm({ title:`Delete ${name}?`,
+      body:`This removes <b>${esc(name)}</b> and all of that progress from this device. It cannot be undone.`,
+      ok:'Delete' })){ deleteUser(key); applyPrefs(); location.hash = '#/'; route(); }
+  };
 }
 
 function ring(pct, size=58){
@@ -174,6 +264,295 @@ const topicPct = t => {
    4. Screens
    --------------------------------------------------------- */
 const view = () => $('#view');
+
+/* A small in-app confirm, used before anything destructive. */
+function askConfirm({ title, body, ok='Yes, do it', danger=true }){
+  return new Promise(resolve => {
+    const back = el('div','modalback');
+    back.innerHTML = `<div class="modal">
+      <h3>${esc(title)}</h3><p>${body}</p>
+      <div class="mrow">
+        <button class="btn" data-no>Cancel</button>
+        <button class="btn ${danger?'danger':'primary'}" data-yes>${esc(ok)}</button>
+      </div></div>`;
+    document.body.appendChild(back);
+    const done = v => { back.remove(); resolve(v); };
+    back.querySelector('[data-no]').onclick = () => done(false);
+    back.querySelector('[data-yes]').onclick = () => done(true);
+    back.onclick = e => { if(e.target === back) done(false); };
+  });
+}
+
+/* --- sign in by username --------------------------------- */
+function screenSignIn(){
+  const users = userList();
+  view().innerHTML = `<div class="wrap"><div class="signin">
+    <div class="signlogo">🔬</div>
+    <h1 class="h1">Leen Science</h1>
+    <p class="sub">Type your username to start. Your stars and scores are saved under that name,
+       so next time just type it again.</p>
+    <div class="artrans ar" style="border:0;margin:-10px 0 18px">اكتبي اسم المستخدم للبدء. نجومك ودرجاتك بتتحفظ باسمك، وفي المرة الجاية اكتبي نفس الاسم.</div>
+
+    <form id="signForm" class="signbox" autocomplete="off">
+      <input id="userInput" type="text" placeholder="e.g. LeenAhmed" maxlength="24"
+             autocapitalize="words" autocorrect="off" spellcheck="false">
+      <button class="btn primary lg" type="submit">Start →</button>
+    </form>
+    <div id="signErr" class="signerr" hidden></div>
+
+    <button class="btn ghost teacherlink" data-go="#/teacher">👩‍🏫 Teacher view</button>
+
+    ${users.length ? `<div class="whoelse">
+      <div class="h2" style="font-size:16px;margin:30px 0 12px">Or tap your name</div>
+      <div class="usergrid">${users.map(u => `
+        <div class="usercard">
+          <button class="userpick" data-user="${esc(u.key)}">
+            <span class="av">${esc(u.name.slice(0,1).toUpperCase())}</span>
+            <span class="un">
+              <b>${esc(u.name)}</b>
+              <span>⭐ ${u.stars} · ${Object.values(u.skills||{}).filter(x=>x.mastered).length} mastered</span>
+            </span>
+          </button>
+          <button class="userdel" data-del="${esc(u.key)}" title="Remove ${esc(u.name)}">✕</button>
+        </div>`).join('')}</div>
+    </div>` : ''}
+  </div></div>`;
+
+  const input = $('#userInput'), err = $('#signErr');
+  setTimeout(() => input.focus(), 80);
+
+  $('#signForm').onsubmit = e => {
+    e.preventDefault();
+    const raw = input.value.trim();
+    if(userKey(raw).length < 2){
+      err.hidden = false;
+      err.textContent = 'Please type at least 2 letters — for example LeenAhmed.';
+      input.focus(); return;
+    }
+    const returning = !!STORE.users[userKey(raw)];
+    signIn(raw); applyPrefs(); beep('ok');
+    if(returning) toast(`Welcome back, ${DB.name}! ⭐ ${DB.stars}`);
+    location.hash = '#/';
+    route();
+  };
+
+  view().querySelectorAll('[data-user]').forEach(b => b.onclick = () => {
+    signIn(STORE.users[b.dataset.user].name); applyPrefs(); beep('ok');
+    location.hash = '#/'; route();
+  });
+  view().querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const u = STORE.users[b.dataset.del];
+    if(await askConfirm({ title:`Remove ${u.name}?`,
+      body:`This permanently deletes <b>${esc(u.name)}</b>'s stars and scores on this device. It cannot be undone.`,
+      ok:'Remove' })){ deleteUser(b.dataset.del); route(); }
+  });
+}
+
+/* ---------------------------------------------------------
+   4b. Teacher view — every account saved in THIS browser
+   Progress lives in each browser's own storage, so this lists the
+   students who practised on this device. For a student who works on
+   their own tablet, use Export on their device and Import here.
+   --------------------------------------------------------- */
+function answerText(q){
+  switch(q.t){
+    case 'mcq':   return String(q.choices[q.a]);
+    case 'tf':    return q.a ? 'True' : 'False';
+    case 'fill':  return q.a.map(g => g[0]).join(', ');
+    case 'term':  return q.a[0];
+    case 'order': return q.a.map(id => (q.items.find(i => i.id === id)||{}).label || id).join(' → ');
+    case 'match': return q.pairs.map(p => `${p.l} → ${p.r}`).join('; ');
+    case 'label': return q.points.map(pt => `${pt.id}=${pt.a[0]}`).join(' ');
+    case 'written': return q.model;
+    default: return '';
+  }
+}
+const overallPct = u => {
+  const all = allSkills().map(x => (u.skills||{})[x.skill.id]);
+  const n = all.length || 1;
+  return Math.round(all.reduce((a,x) => a + (x ? x.score : 0), 0) / n);
+};
+const accuracyOf = u => {
+  const v = Object.values(u.skills||{});
+  const seen = v.reduce((a,x) => a + x.seen, 0), right = v.reduce((a,x) => a + x.right, 0);
+  return seen ? Math.round(right/seen*100) : 0;
+};
+const masteredOf = u => Object.values(u.skills||{}).filter(x => x.mastered).length;
+
+function screenTeacher(){
+  const users = userList();
+  const totalSkills = allSkills().length;
+
+  // which questions trip up the most students?
+  const tally = {};
+  users.forEach(u => (u.mistakes||[]).forEach(m => {
+    const k = m.s + '#' + m.q;
+    (tally[k] = tally[k] || { n:0, s:m.s, q:m.q, who:[] });
+    tally[k].n++; tally[k].who.push(u.name);
+  }));
+  const worst = Object.values(tally).sort((a,b) => b.n - a.n).slice(0, 8)
+    .map(t => { const f = findSkill(t.s); return f && f.skill.questions[t.q] ? Object.assign({}, t, { q:f.skill.questions[t.q], skill:f.skill }) : null; })
+    .filter(Boolean);
+
+  const avg = users.length ? Math.round(users.reduce((a,u) => a + overallPct(u), 0) / users.length) : 0;
+
+  view().innerHTML = `<div class="wrap">
+    ${crumbs([DB ? {label:'Home', href:'#/'} : {label:'Sign in', href:'#/switch'}, {label:'Teacher'}])}
+    <div class="theadrow">
+      <div>
+        <h1 class="h1">👩‍🏫 Teacher view</h1>
+        <p class="sub">Students who practised in this browser.</p>
+      </div>
+      <div class="tactions">
+        <button class="btn" id="expAll">⬇︎ Export all</button>
+        <button class="btn" id="impBtn">⬆︎ Import</button>
+        <input type="file" id="impFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
+
+    <div class="notice">
+      Scores are saved inside each browser. This page shows the students who worked
+      <b>on this device</b>. If a student uses their own tablet, press <b>Export</b> there
+      and <b>Import</b> the file here to see their progress.
+      <div class="artrans ar">الدرجات بتتحفظ جوه كل متصفح، فالصفحة دي بتعرض الطلبة اللي ذاكروا على <b>الجهاز ده</b>.
+      لو الطالب بيستخدم تابلت خاص بيه، اعملي <b>Export</b> من عنده و<b>Import</b> هنا.</div>
+    </div>
+
+    ${users.length ? `
+    <div class="statrow" style="margin-top:22px">
+      <div class="stat b"><div class="n">${users.length}</div><div class="l">Students</div></div>
+      <div class="stat g"><div class="n">${avg}%</div><div class="l">Class average</div></div>
+      <div class="stat a"><div class="n">${users.reduce((a,u)=>a+(u.stars||0),0)}</div><div class="l">Stars earned</div></div>
+      <div class="stat v"><div class="n">${users.reduce((a,u)=>a+(u.mistakes||[]).length,0)}</div><div class="l">Open mistakes</div></div>
+    </div>
+
+    <h2 class="h2">📊 Students</h2>
+    <div style="overflow-x:auto"><table class="grid">
+      <tr><th>Student</th><th>Progress</th><th>Mastered</th><th>Accuracy</th><th>Stars</th><th>Mistakes</th><th>Last seen</th><th></th></tr>
+      ${users.map(u => `<tr>
+        <td><b>${esc(u.name)}</b></td>
+        <td><div class="minibar"><i style="width:${overallPct(u)}%"></i></div><span class="pc">${overallPct(u)}%</span></td>
+        <td>${masteredOf(u)} / ${totalSkills}</td>
+        <td>${accuracyOf(u)}%</td>
+        <td>⭐ ${u.stars||0}</td>
+        <td>${(u.mistakes||[]).length}</td>
+        <td class="dim">${esc(u.last||'—')}</td>
+        <td><button class="btn sm" data-go="#/teacher/${encodeURIComponent(u.key)}">View</button></td>
+      </tr>`).join('')}
+    </table></div>
+
+    ${worst.length ? `<h2 class="h2">🔁 Most-missed questions</h2>
+      <div class="reviewlist">${worst.map(w => `<div class="rev no">
+        <div class="q">${w.q.q}</div>
+        <div class="a">Correct: <b>${esc(answerText(w.q))}</b> · missed by ${w.n} student${w.n>1?'s':''}
+          <span class="dim">(${esc(w.who.join(', '))})</span> · ${esc(w.skill.title)}</div>
+      </div>`).join('')}</div>` : ''}
+    ` : `<div class="empty"><div class="e">🪑</div><h2>No students yet</h2>
+          <p>Scores appear here once someone signs in and practises on this device.</p></div>`}
+  </div>`;
+
+  $('#expAll').onclick = () => exportData(null);
+  $('#impBtn').onclick = () => $('#impFile').click();
+  $('#impFile').onchange = e => importData(e.target.files[0]);
+}
+
+function screenTeacherStudent(key){
+  const u = STORE.users[decodeURIComponent(key)];
+  if(!u) return screenTeacher();
+  const rows = [];
+  SC.topics.forEach(t => t.lessons.forEach(l => l.skills.forEach(sk => {
+    const st = (u.skills||{})[sk.id] || { score:0, seen:0, right:0, wrong:0, mastered:false };
+    rows.push({ t, l, sk, st });
+  })));
+  const mistakes = (u.mistakes||[]).map(m => {
+    const f = findSkill(m.s);
+    return f && f.skill.questions[m.q] ? { q:f.skill.questions[m.q], skill:f.skill } : null;
+  }).filter(Boolean);
+
+  view().innerHTML = `<div class="wrap">
+    ${crumbs([{label:'Teacher', href:'#/teacher'},{label:u.name}])}
+    <div class="theadrow">
+      <div>
+        <h1 class="h1">${esc(u.name)}</h1>
+        <p class="sub">Started ${esc(u.created||'—')} · last practised ${esc(u.last||'—')}</p>
+      </div>
+      <div class="tactions"><button class="btn" id="expOne">⬇︎ Export ${esc(u.name)}</button></div>
+    </div>
+
+    <div class="statrow" style="margin-top:6px">
+      <div class="stat b"><div class="n">${overallPct(u)}%</div><div class="l">Overall progress</div></div>
+      <div class="stat g"><div class="n">${masteredOf(u)}</div><div class="l">Skills mastered</div></div>
+      <div class="stat a"><div class="n">${accuracyOf(u)}%</div><div class="l">Accuracy</div></div>
+      <div class="stat v"><div class="n">⭐ ${u.stars||0}</div><div class="l">Stars</div></div>
+    </div>
+
+    <h2 class="h2">🎯 Skill by skill</h2>
+    <div style="overflow-x:auto"><table class="grid">
+      <tr><th>Lesson</th><th>Skill</th><th>SmartScore</th><th>Right</th><th>Wrong</th><th>Accuracy</th></tr>
+      ${rows.map(r => `<tr>
+        <td class="dim">L${r.l.num}</td>
+        <td>${r.st.mastered?'🏆 ':''}${esc(r.sk.title)}</td>
+        <td><div class="minibar ${r.st.score>=100?'full':''}"><i style="width:${r.st.score}%"></i></div><span class="pc">${r.st.score}</span></td>
+        <td>${r.st.right}</td><td>${r.st.wrong}</td>
+        <td>${r.st.seen ? Math.round(r.st.right/r.st.seen*100)+'%' : '—'}</td>
+      </tr>`).join('')}
+    </table></div>
+
+    <h2 class="h2">❌ Still getting wrong (${mistakes.length})</h2>
+    ${mistakes.length ? `<div class="reviewlist">${mistakes.map(m => `<div class="rev no">
+        <div class="q">${m.q.q}</div>
+        <div class="a">Correct: <b>${esc(answerText(m.q))}</b> · <span class="dim">${esc(m.skill.title)}</span></div>
+      </div>`).join('')}</div>`
+      : `<div class="notice">Nothing outstanding — every mistake has been fixed. 🎉</div>`}
+  </div>`;
+
+  $('#expOne').onclick = () => exportData(u.key);
+}
+
+/* --- export / import ------------------------------------- */
+function exportData(key){
+  const payload = key
+    ? { v:2, kind:'student', users:{ [key]: STORE.users[key] } }
+    : { v:2, kind:'class', users: STORE.users };
+  payload.exported = new Date().toISOString();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const a = el('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (key ? 'leen-science-' + key : 'leen-science-class') + '-' + today() + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+function importData(file){
+  if(!file) return;
+  const fr = new FileReader();
+  fr.onload = async () => {
+    let data;
+    try { data = JSON.parse(fr.result); } catch(e){ return toast('That file is not a valid export.'); }
+    if(!data || !data.users || typeof data.users !== 'object') return toast('That file is not a valid export.');
+    const names = Object.values(data.users).map(u => u && u.name).filter(Boolean);
+    if(!names.length) return toast('That file has no students in it.');
+    const clash = Object.keys(data.users).filter(k => STORE.users[k]);
+    const go = await askConfirm({
+      title: `Import ${names.length} student${names.length>1?'s':''}?`,
+      body: `This adds <b>${esc(names.join(', '))}</b> to this device.` +
+            (clash.length ? ` <b>${esc(clash.join(', '))}</b> already exist here and their saved progress will be replaced by the file.` : ''),
+      ok: 'Import', danger: clash.length > 0 });
+    if(!go) return;
+    Object.entries(data.users).forEach(([k, u]) => {
+      if(u && u.name) STORE.users[k] = Object.assign(blankUser(u.name), u);
+    });
+    save(); toast(`Imported ${names.length} student${names.length>1?'s':''}.`); route();
+  };
+  fr.readAsText(file);
+}
+
+function toast(msg){
+  const t = el('div','toast', esc(msg));
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('on'), 10);
+  setTimeout(() => { t.classList.remove('on'); setTimeout(() => t.remove(), 400); }, 2600);
+}
 
 function screenHome(){
   const skills = allSkills();
@@ -892,6 +1271,9 @@ function route(){
   bindKeys(null);
   const p = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   scrollTo(0,0);
+  if(p[0] === 'teacher') return p[1] ? screenTeacherStudent(p[1]) : screenTeacher();
+  if(!DB) return screenSignIn();        // nobody signed in yet
+  if(p[0] === 'switch'){ signOut(); applyPrefs(); return screenSignIn(); }
   if(!p.length)              return screenHome();
   if(p[0] === 't'   && p[2]) return screenLesson(p[1], p[2]);
   if(p[0] === 't')           return screenTopic(p[1]);

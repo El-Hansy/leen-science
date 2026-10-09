@@ -212,8 +212,11 @@ function chrome(){
 
   const menu = $('#whoMenu');
   $('#whoBtn').onclick = e => { e.stopPropagation(); menu.hidden = !menu.hidden; };
-  document.addEventListener('click', () => { if(menu) menu.hidden = true; });
-  menu.onclick = e => e.stopPropagation();
+  // Close on a click outside the menu. Clicks *inside* are deliberately not
+  // swallowed: stopping them here would also stop them reaching the delegated
+  // [data-go] navigation handler, which silently killed "Teacher view".
+  document.addEventListener('click', e => { if(!menu.contains(e.target)) menu.hidden = true; });
+  menu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { menu.hidden = true; }));
 
   menu.querySelector('[data-act="switch"]').onclick = () => {
     menu.hidden = true; signOut(); applyPrefs(); location.hash = '#/'; route();

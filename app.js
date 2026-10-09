@@ -52,7 +52,64 @@ const PREFS = STORE.prefs;
 let DB = STORE.current ? STORE.users[STORE.current] : null;   // the signed-in student
 if(STORE.current && !DB) STORE.current = null;
 
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(STORE)); } catch(e){} };
+let SAVE_OK = true;
+const save = () => {
+  try { localStorage.setItem(KEY, JSON.stringify(STORE)); SAVE_OK = true; }
+  catch(e){ SAVE_OK = false; }
+};
+
+/* Mini-browsers inside chat and social apps keep their own throwaway
+   storage, so a child can practise for an hour and lose everything when
+   the window closes. Detect that and say so plainly instead of silently
+   starting from zero. */
+const IN_APP_BROWSER = (function(){
+  const ua = navigator.userAgent || '';
+  if(/FBAN|FBAV|FB_IAB|Instagram|Line\/|MicroMessenger|Snapchat|TikTok|Twitter|Pinterest|LinkedInApp/i.test(ua)) return true;
+  if(/\bwv\b/.test(ua)) return true;                    // Android WebView
+  if(/Android.*Version\/[\d.]+.*Chrome/i.test(ua)) return true;
+  return false;
+})();
+
+function storageWorks(){
+  try {
+    const k = '__probe__' + Date.now();
+    localStorage.setItem(k, '1');
+    const ok = localStorage.getItem(k) === '1';
+    localStorage.removeItem(k);
+    return ok;
+  } catch(e){ return false; }
+}
+
+/* Ask the browser to keep this data instead of evicting it when space
+   runs low. Supported browsers only; harmless everywhere else. */
+function askToPersist(){
+  try { if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch(e){}
+}
+
+function storageWarning(){
+  const broken = !storageWorks() || !SAVE_OK;
+  if(!broken && !IN_APP_BROWSER) return '';
+  return `<div class="warnbox">
+    <b>⚠️ ${broken ? 'This window cannot save progress' : 'Progress may not be saved here'}</b>
+    <p>It looks like this page was opened <b>inside another app</b> (WhatsApp, Messages, Instagram…).
+       Those mini-browsers throw away saved stars and scores when you close them.</p>
+    <p><b>Open it in Safari or Chrome instead:</b> tap the <b>⋯</b> or <b>compass</b> icon in the corner of this
+       window and choose <b>“Open in Safari”</b> / <b>“Open in Chrome”</b>. Then use <b>Add to Home Screen</b>
+       so it opens properly every time.</p>
+    <div class="warn-ar ar">الصفحة دي مفتوحة <b>جوه تطبيق تاني</b> (زي واتساب)، والمتصفح المصغر ده بيمسح النجوم والدرجات لما تقفليه.
+      افتحيها في <b>Safari</b> أو <b>Chrome</b>: اضغطي على <b>⋯</b> أو علامة البوصلة واختاري <b>Open in Safari</b>،
+      وبعدين <b>Add to Home Screen</b>.</div>
+    <button class="btn sm" id="copyLink">🔗 Copy the link</button>
+  </div>`;
+}
+function wireWarning(){
+  const b = $('#copyLink'); if(!b) return;
+  b.onclick = () => {
+    const url = location.origin + location.pathname;
+    try { navigator.clipboard.writeText(url).then(() => toast('Link copied — paste it into Safari'),
+          () => toast(url)); } catch(e){ toast(url); }
+  };
+}
 
 function signIn(rawName){
   const k = userKey(rawName);
@@ -62,6 +119,7 @@ function signIn(rawName){
   DB = STORE.users[k];
   DB.last = today();
   save();
+  askToPersist();
   return DB;
 }
 function signOut(){ STORE.current = null; DB = null; save(); }
@@ -295,6 +353,7 @@ function screenSignIn(){
     <p class="sub">Type your username to start. Your stars and scores are saved under that name,
        so next time just type it again.</p>
     <div class="artrans ar" style="border:0;margin:-10px 0 18px">اكتبي اسم المستخدم للبدء. نجومك ودرجاتك بتتحفظ باسمك، وفي المرة الجاية اكتبي نفس الاسم.</div>
+    ${storageWarning()}
 
     <form id="signForm" class="signbox" autocomplete="off">
       <input id="userInput" type="text" placeholder="e.g. LeenAhmed" maxlength="24"
@@ -321,6 +380,7 @@ function screenSignIn(){
     </div>` : ''}
   </div></div>`;
 
+  wireWarning();
   const input = $('#userInput'), err = $('#signErr');
   setTimeout(() => input.focus(), 80);
 
@@ -407,18 +467,24 @@ function screenTeacher(){
         <p class="sub">Students who practised in this browser.</p>
       </div>
       <div class="tactions">
-        <button class="btn" id="expAll">⬇︎ Export all</button>
+        <button class="btn primary" id="expCsv" title="A spreadsheet of every score">📊 Scores (Excel)</button>
+        <button class="btn" id="prnBtn" title="Print or save as PDF">🖨️ Print</button>
+        <button class="btn" id="expAll" title="Transfer file for moving students to another device">🗄️ Backup file</button>
         <button class="btn" id="impBtn">⬆︎ Import</button>
         <input type="file" id="impFile" accept="application/json,.json" hidden>
       </div>
     </div>
 
     <div class="notice">
-      Scores are saved inside each browser. This page shows the students who worked
-      <b>on this device</b>. If a student uses their own tablet, press <b>Export</b> there
-      and <b>Import</b> the file here to see their progress.
-      <div class="artrans ar">الدرجات بتتحفظ جوه كل متصفح، فالصفحة دي بتعرض الطلبة اللي ذاكروا على <b>الجهاز ده</b>.
-      لو الطالب بيستخدم تابلت خاص بيه، اعملي <b>Export</b> من عنده و<b>Import</b> هنا.</div>
+      <b>📊 Scores (Excel)</b> downloads a spreadsheet you can read and keep ·
+      <b>🗄️ Backup file</b> is only for moving students to another device.
+      <br>Scores live inside each browser, so this page shows the students who worked
+      <b>on this device</b>. For a student on their own tablet: press <b>Backup file</b> there,
+      then <b>Import</b> it here.
+      <div class="artrans ar"><b>Scores (Excel)</b> بينزّل ملف درجات تقدري تفتحيه وتقريه ·
+      <b>Backup file</b> ملف نقل بين الأجهزة بس.
+      <br>الدرجات بتتحفظ جوه كل متصفح، فالصفحة دي بتعرض الطلبة اللي ذاكروا على <b>الجهاز ده</b>.
+      لو الطالب على تابلت خاص بيه: اعملي <b>Backup file</b> من عنده وبعدين <b>Import</b> هنا.</div>
     </div>
 
     ${users.length ? `
@@ -454,6 +520,8 @@ function screenTeacher(){
           <p>Scores appear here once someone signs in and practises on this device.</p></div>`}
   </div>`;
 
+  $('#expCsv').onclick = () => exportClassCSV();
+  $('#prnBtn').onclick = () => window.print();
   $('#expAll').onclick = () => exportData(null);
   $('#impBtn').onclick = () => $('#impFile').click();
   $('#impFile').onchange = e => importData(e.target.files[0]);
@@ -479,7 +547,11 @@ function screenTeacherStudent(key){
         <h1 class="h1">${esc(u.name)}</h1>
         <p class="sub">Started ${esc(u.created||'—')} · last practised ${esc(u.last||'—')}</p>
       </div>
-      <div class="tactions"><button class="btn" id="expOne">⬇︎ Export ${esc(u.name)}</button></div>
+      <div class="tactions">
+        <button class="btn primary" id="expOneCsv">📊 Report (Excel)</button>
+        <button class="btn" id="prnOne">🖨️ Print</button>
+        <button class="btn" id="expOne" title="Transfer file for another device">🗄️ Backup file</button>
+      </div>
     </div>
 
     <div class="statrow" style="margin-top:6px">
@@ -509,10 +581,67 @@ function screenTeacherStudent(key){
       : `<div class="notice">Nothing outstanding — every mistake has been fixed. 🎉</div>`}
   </div>`;
 
+  $('#expOneCsv').onclick = () => exportStudentCSV(u.key);
+  $('#prnOne').onclick = () => window.print();
   $('#expOne').onclick = () => exportData(u.key);
 }
 
-/* --- export / import ------------------------------------- */
+/* --- downloads: a readable spreadsheet, or a transfer file --- */
+function downloadFile(name, text, mime){
+  const a = el('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+const csvCell = v => {
+  const t = String(v == null ? '' : v);
+  return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g,'""') + '"' : t;
+};
+/* \ufeff = byte-order mark, so Excel opens it as UTF-8 instead of mojibake */
+const toCSV = rows => '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+const plain = h => String(h).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+/* One row per student, one column per skill — opens in Excel or Numbers. */
+function exportClassCSV(){
+  const skills = allSkills();
+  const head = ['Student','Overall %','Skills mastered','Of','Accuracy %','Stars','Open mistakes','Started','Last seen']
+    .concat(skills.map(x => `L${x.lesson.num} · ${x.skill.title}`));
+  const rows = [head];
+  userList().forEach(u => {
+    rows.push([u.name, overallPct(u), masteredOf(u), skills.length, accuracyOf(u), u.stars||0,
+      (u.mistakes||[]).length, u.created||'', u.last||'']
+      .concat(skills.map(x => ((u.skills||{})[x.skill.id] || {}).score || 0)));
+  });
+  downloadFile('leen-science-class-' + today() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
+  toast('Scores file downloaded — open it in Excel.');
+}
+
+/* One student: every skill, then every question they still get wrong. */
+function exportStudentCSV(key){
+  const u = STORE.users[key]; if(!u) return;
+  const rows = [
+    ['Student', u.name], ['Overall progress', overallPct(u) + '%'],
+    ['Skills mastered', masteredOf(u) + ' of ' + allSkills().length],
+    ['Accuracy', accuracyOf(u) + '%'], ['Stars', u.stars||0],
+    ['Started', u.created||''], ['Last seen', u.last||''], [],
+    ['Lesson','Skill','SmartScore','Right','Wrong','Accuracy %','Mastered']
+  ];
+  allSkills().forEach(x => {
+    const st = (u.skills||{})[x.skill.id] || { score:0, seen:0, right:0, wrong:0, mastered:false };
+    rows.push(['L' + x.lesson.num, x.skill.title, st.score, st.right, st.wrong,
+      st.seen ? Math.round(st.right/st.seen*100) : '', st.mastered ? 'yes' : '']);
+  });
+  rows.push([], ['Still getting wrong','Correct answer','Skill']);
+  (u.mistakes||[]).forEach(m => {
+    const f = findSkill(m.s); const q = f && f.skill.questions[m.q];
+    if(q) rows.push([plain(q.q), plain(answerText(q)), f.skill.title]);
+  });
+  downloadFile('leen-science-' + key + '-' + today() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
+  toast(u.name + "'s report downloaded.");
+}
+
+/* --- transfer file (JSON) — for moving a student between devices --- */
 function exportData(key){
   const payload = key
     ? { v:2, kind:'student', users:{ [key]: STORE.users[key] } }
@@ -524,6 +653,7 @@ function exportData(key){
   a.download = (key ? 'leen-science-' + key : 'leen-science-class') + '-' + today() + '.json';
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Transfer file saved — Import it on the other device.');
 }
 
 function importData(file){
@@ -567,6 +697,7 @@ function screenHome(){
   let html = `<div class="wrap">
     <h1 class="h1">Hi ${esc(DB.name)} 👋</h1>
     <p class="sub">Pick a topic, learn it, then practise until your score reaches 100.</p>
+    ${storageWarning()}
 
     <div class="statrow">
       <div class="stat a"><div class="n">${DB.stars}</div><div class="l">Stars earned</div></div>
@@ -599,6 +730,7 @@ function screenHome(){
   if(!SC.topics.length) html += `<div class="empty"><div class="e">📭</div><p>No topics loaded yet.</p></div>`;
   html += `</div>`;
   view().innerHTML = html;
+  wireWarning();
 }
 
 function screenTopic(tid){

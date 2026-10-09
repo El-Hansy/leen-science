@@ -474,3 +474,35 @@ table.grid .dim{color:var(--muted); font-size:13px}
   .whobtn{padding:0 8px; max-width:none}
   .theadrow{flex-direction:column}
 }
+
+/* --- warning when the browser throws storage away ---------------------- */
+.warnbox{margin:0 0 22px; padding:16px 20px; border-radius:var(--radius-s); text-align:start;
+  background:var(--bad-soft); border:1px solid color-mix(in srgb,var(--bad) 32%,transparent); border-inline-start:5px solid var(--bad)}
+:root[data-theme="dark"] .warnbox{background:var(--card2)}
+.warnbox > b{color:var(--bad); display:block; margin-bottom:6px; font-size:15.5px}
+.warnbox p{margin:0 0 8px; font-size:14px; color:var(--ink2); line-height:1.6}
+.warnbox p b{color:var(--ink)}
+/* this one warning is always shown in Arabic too — it is the message a
+   parent most needs to understand */
+.warnbox .warn-ar{display:block; margin-top:10px; padding-top:10px; font-size:14px;
+  border-top:1px dashed color-mix(in srgb,var(--bad) 35%,transparent); color:var(--ink2); line-height:1.8}
+.warnbox .btn{margin-top:6px}
+
+/* --- printing the teacher pages ---------------------------------------- */
+@media print{
+  @page{margin:14mm}
+  body{background:#fff !important}
+  .topbar,.tactions,.crumb,footer,#confetti,.infoi,.notice,.warnbox,.toast{display:none !important}
+  main{padding:0 !important}
+  .wrap{width:100% !important; padding:0 !important}
+  .card,table.grid,.rev,.stat{box-shadow:none !important; break-inside:avoid}
+  table.grid{font-size:11pt}
+  table.grid th{background:#eee !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  table.grid th,table.grid td{white-space:normal}
+  .minibar{border:1px solid #999}
+  .minibar i{background:#555 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .statrow{grid-template-columns:repeat(4,1fr) !important}
+  .h1{font-size:20pt} .h2{font-size:14pt; break-after:avoid}
+  .reviewlist{break-inside:auto}
+  a{text-decoration:none; color:inherit}
+}

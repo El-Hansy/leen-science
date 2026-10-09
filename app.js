@@ -723,6 +723,7 @@ function runSession(cfg){
     if(mode === 'quiz'){ idx++; paintBar(); setTimeout(next, 160); return; }
 
     ctrl.reveal();
+    foot.innerHTML = '';   // drop the "Check my answer" button before the next-step buttons
     beep(res.correct ? 'ok' : 'no');
     paintBar();
     const extra = cur.q.t === 'written'

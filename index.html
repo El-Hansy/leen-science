@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Leen Science</title>
+<meta name="description" content="Grade 4 science practice — learn each lesson, then answer questions and earn a score.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔬</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Cairo:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="wrap">
+      <button class="brandmark" id="homeBtn">
+        <span class="logo">🔬</span>
+        <span>Leen Science<small>Grade 4 · practice &amp; quizzes</small></span>
+      </button>
+      <div class="spacer"></div>
+      <div class="starpill">⭐ <span id="starCount">0</span></div>
+      <button class="iconbtn" id="langBtn" title="Show every Arabic translation · إظهار كل الترجمات">ع</button>
+      <button class="iconbtn" id="soundBtn" title="Sound">🔊</button>
+      <button class="iconbtn" id="themeBtn" title="Dark mode">🌙</button>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <footer class="wrap" style="padding-bottom:30px;color:var(--muted);font-size:12.5px;text-align:center">
+    Built from the Grade 4 science booklet · progress is saved in this browser
+  </footer>
+</div>
+
+<canvas id="confetti"></canvas>
+
+<script src="app.js"></script>
+<!-- ===== content packs: add one <script> line per booklet ===== -->
+<script src="content/topic4.js"></script>
+</body>
+</html>
